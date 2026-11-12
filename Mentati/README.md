@@ -112,6 +112,7 @@ Sem serviço gerenciado, a operação fica por minha conta. Já estão prontos p
 | Servidor único | Ponto único de falha | Aceitável no piloto; backup externo com restauração verificada |
 | Escala vertical | Limite de crescimento | Dados e sessão ficam no banco; para ter réplicas, basta levar o limite de requisições para um armazenamento compartilhado |
 | Firebase Auth | Dependência externa | Restrita ao login; o sistema não armazena senhas |
+| Isolamento por clínica na aplicação, sem Row-Level Security | Uma query sem o filtro poderia vazar dados de outra clínica | O `clinica_id` vem só da autenticação, e toda rota tem teste de acesso por outra clínica |
 
 ---
 
@@ -149,7 +150,7 @@ Toda forma de perder a corrida chega ao cliente do mesmo jeito: unicidade (`2350
 
 ### 2. Prontuário imutável e o problema que isso cria
 
-**Problema.** Evoluções, receitas e documentos não podem ser editados nem apagados. Um trigger no banco bloqueia `UPDATE` e `DELETE`, e a correção é sempre um novo registro ligado ao original. Só que a imutabilidade cria um risco novo: se a resposta da API se perde na rede e o profissional toca em "Salvar" de novo, nasce uma **duplicata que nunca mais pode ser apagada**.
+**Problema.** Evoluções, receitas e documentos não podem ser editados nem apagados. Um trigger no banco bloqueia `UPDATE` e `DELETE`, e a correção é sempre um novo registro ligado ao original. Considerei event sourcing e versionamento de registros, mas o prontuário já é, por natureza, uma sequência de registros datados e com autor: reconstruir estado a partir de eventos traria complexidade sem ganho. Só que a imutabilidade cria um risco novo: se a resposta da API se perde na rede e o profissional toca em "Salvar" de novo, nasce uma **duplicata que nunca mais pode ser apagada**.
 
 **Decisão.** Cada formulário gera uma `chave_envio` (UUID) enquanto está aberto, e o banco garante a unicidade por clínica:
 
