@@ -1,8 +1,10 @@
+<sub>[← Voltar ao índice](../README.md)</sub>
+
 # FinFlow
 
-**Finanças da família e agenda pelo WhatsApp, com um agente de IA que só confirma o que de fato executou.**
+**Finanças da família e agenda pelo WhatsApp, com um agente de IA construído para não confirmar o que não executou.**
 
-SaaS brasileiro em produção, com clientes pagantes. A pessoa escreve, manda áudio ou foto de comprovante no WhatsApp e o agente registra despesas, contas a pagar, cartões, metas e compromissos. Um painel web (PWA) mostra o mesmo estado para revisar, organizar e planejar.
+SaaS brasileiro em produção, com clientes pagantes: [finflows.com.br](https://www.finflows.com.br/). A pessoa escreve, manda áudio ou foto de comprovante no WhatsApp e o agente registra despesas, contas a pagar, cartões, metas e compromissos. Um painel web (PWA) mostra o mesmo estado para revisar, organizar e planejar.
 
 ![Painel do FinFlow com saldo, valor pendente, insight de gastos e últimas transações](assets/painel.png)
 
@@ -17,12 +19,12 @@ SaaS brasileiro em produção, com clientes pagantes. A pessoa escreve, manda á
 | **Problema** | Controle financeiro morre porque registrar dá trabalho. Planilha e app exigem disciplina, mas mandar mensagem no WhatsApp a pessoa já faz |
 | **Meu papel** | Fundador. Produto, arquitetura, desenvolvimento full stack, operação, suporte e cobrança, conduzidos com agentes de IA |
 | **Stack** | TypeScript · Node.js · Fastify · Genkit + Gemini · Firestore · Cloud Run · Cloud Functions · Cloud Tasks · React + Vite (PWA) · Zustand · Dexie · Asaas · Google Calendar |
-| **Escala** | 589 commits em 10 meses · 55 ferramentas do agente · 97 arquivos de teste · ~140 mil linhas de TypeScript |
+| **Dimensão técnica** | 589 commits em 10 meses · 55 ferramentas do agente · 97 arquivos de teste · ~140 mil linhas de TypeScript |
 | **Estágio** | Em produção desde janeiro de 2026, com assinaturas pagas via Pix, boleto e cartão |
 
 **Destaques**
 
-- **Custo unitário medido em produção:** cerca de R$ 0,05 de IA por mensagem, ~8% do ticket numa família típica, e as decisões de infraestrutura que mantêm esse número baixo. [→ Decisão de base](#decisão-de-base-infraestrutura-proporcional-ao-estágio)
+- **Custo unitário medido em produção:** cerca de R$ 0,046 de IA por mensagem, ~8% do ticket numa família típica, e as decisões de infraestrutura que mantêm esse número baixo. [→ Decisão de base](#decisão-de-base-infraestrutura-proporcional-ao-estágio)
 - **Um agente que não confirma o que não fez:** regras nas ferramentas, prévia e confirmação sobre o mesmo conjunto, personalização com precedência definida. [→ Decisões técnicas](#decisões-técnicas)
 - **Dinheiro contado uma vez só:** meta como reserva de saldo, cartão como obrigação, idempotência que cobre todos os efeitos da cobrança.
 - **Testes para um sistema não determinístico:** corpus de regressão do agente, Security Rules testadas contra o emulador e validação pelo estado gravado. [→ Testes](#como-testo-um-agente-que-não-é-determinístico)
@@ -51,7 +53,7 @@ flowchart LR
 
 Três fronteiras orientam o resto do sistema:
 
-- **Multi-tenant por família.** Todo dado vive em `families/{familyId}/…`, e as Security Rules do Firestore bloqueiam acesso cruzado independentemente do backend. As Rules têm suíte própria, que roda contra o emulador.
+- **Multi-tenant por família.** Todo dado vive em `families/{familyId}/…`. O painel lê o Firestore direto, e nesse caminho as Security Rules restringem os dados à família e ao papel do usuário, com suíte própria que roda contra o emulador. O backend usa o Admin SDK, que não passa pelas Rules, então ali o escopo por família é aplicado pelo código em toda consulta.
 - **O agente propõe, a ferramenta decide.** Cada ferramenta devolve erros estruturados (`DUPLICATE_RECENT`, `LIKELY_TEACHING`, …), e o fluxo de chat tem guardas para resposta de sucesso sem chamada de ferramenta, com nova tentativa e fallback de modelo.
 - **Painel local-first.** O PWA guarda transações, eventos e cadastros em IndexedDB e sincroniza só o que mudou desde a última visita, com fila para operações feitas offline.
 
@@ -61,13 +63,15 @@ No início, a pergunta principal era de negócio, não técnica: alguém usa iss
 
 O preço reforça essa restrição. O FinFlow custa **R$ 19,90 por mês, ou R$ 29,90 para uma família de até 5 pessoas**, e o custo de cada mensagem decide se a margem existe. Custo unitário é requisito de produto, não otimização para depois.
 
-Medido nos logs de produção de outubro e novembro de 2026: cada mensagem custa em média **US$ 0,008 (cerca de R$ 0,05) em IA**. Uma família típica, com 33 mensagens no mês, fica perto de **R$ 1,50, ou ~8% do ticket**. As mais ativas chegam a ~25%. A IA é o maior custo variável do produto, e é por isso que as decisões abaixo existem.
+Medido nos logs de produção: cada mensagem custa em média **US$ 0,0084 (R$ 0,046) em IA**. Na família mediana, com 33 mensagens no mês, isso dá **R$ 1,52, ou ~8% do ticket**. A família mais ativa da amostra, com 109 mensagens, chega a R$ 5,02, ~25%. A IA é o maior custo variável do produto, e é por isso que as decisões abaixo existem.
+
+<sub>Método: mensagens recebidas pelo chat entre 13/10 e 11/11/2026, sem a família de testes. Cada mensagem inclui todas as rodadas de chamada de ferramenta, e as rodadas anteriores à última foram contadas como se não tivessem cache, o que superestima o custo. Preço do Gemini 3.1 Flash-Lite (US$ 0,25 por milhão de tokens de entrada, US$ 1,50 por milhão de saída) e câmbio de R$ 5,50. Cobre só o modelo do chat: transcrição de áudio, leitura de comprovante e infraestrutura ficam de fora.</sub>
 
 | Escolha | Por quê | O preço que aceitei | Como compensei |
 |---|---|---|---|
 | **Firestore (NoSQL)** | O free tier cobre a fase de validação. Auth, Security Rules, persistência offline e triggers vêm prontos | Dado financeiro é relacional. Somar o mês, agrupar por categoria ou cruzar conta com período seria um `SUM … GROUP BY` em SQL | Documentos de resumo mantidos por trigger, e cache local no painel com sincronização incremental, para não reler o que não mudou |
-| **Cloud Run com zero instâncias mínimas** | Sem tráfego, custo zero | Cold start de alguns segundos na primeira requisição depois de um período ocioso, no WhatsApp e no painel | Backend em Fastify, escolhido pela inicialização rápida, e painel que abre pelo cache local (abaixo) |
-| **Escala gerenciada** | Cloud Run, Cloud Functions e Cloud Tasks escalam sozinhos | Menos controle fino do que numa VM própria | Hoje: até 10 instâncias × 80 requisições simultâneas. Subir o teto é mudar uma flag, sem migração |
+| **Cloud Run com zero instâncias mínimas** | Sem tráfego, a computação do serviço não custa nada | Cold start de alguns segundos na primeira requisição depois de um período ocioso, no WhatsApp e no painel | Backend em Fastify, escolhido pela inicialização rápida, e painel que abre pelo cache local (abaixo) |
+| **Escala gerenciada** | Cloud Run, Cloud Functions e Cloud Tasks escalam sozinhos | Menos controle fino do que numa VM própria | Teto configurado em 10 instâncias × 80 requisições simultâneas, ainda sem teste de carga. Subir o teto é mudar uma flag, mas a capacidade real também depende da cota do Gemini, do Firestore e da integração com o WhatsApp |
 | **Modelo leve por padrão** | Gemini Flash-Lite atende a maior parte das mensagens e dos comprovantes pelo menor custo por token | Modelos leves erram mais em instruções longas | Regras críticas ficam no código das ferramentas. O modelo maior entra só como fallback quando o leve falha, e a telemetria conta quantas vezes |
 | **WhatsApp pela Evolution API, em VM gratuita** | A API oficial cobra pelas mensagens que a empresa inicia e exige template aprovado para cada uma. Lembretes e resumos diários pesariam muito num ticket de R$ 19,90 | Integração não oficial: o número pode ser desconectado ou bloqueado, e uma desconexão já tirou o bot do ar. Também é um servidor a mais, sem redundância | Isolada atrás de webhook com chave e trocável por variável de ambiente, sem mudar código. Migrar para a API oficial é o plano quando a receita cobrir o custo por mensagem |
 
@@ -75,7 +79,7 @@ Medido nos logs de produção de outubro e novembro de 2026: cada mensagem custa
 
 Num banco relacional isso seria uma consulta com índice. Aqui virou código a manter: edição, exclusão, mudança de status e troca de conta precisam ajustar o resumo corretamente, e o resumo é atualizado de forma assíncrona. Foi uma troca consciente: complexidade de engenharia em vez de custo fixo, numa fase em que o custo fixo pesava mais.
 
-**Cold start nos dois canais.** Com zero instâncias, a primeira requisição depois de um período ocioso espera alguns segundos enquanto o Cloud Run sobe o contêiner. No WhatsApp o atraso pesa menos, porque a pessoa manda a mensagem e segue o que estava fazendo. No painel pesa mais, e a mitigação é o cache local: quem volta vê na hora o último estado salvo, enquanto a sincronização espera o backend acordar. A primeira visita, sem cache, ainda sente o atraso. A saída é conhecida e tem preço: uma instância mínima elimina o cold start em troca de custo fixo mensal, que passa a valer quando a base pagante cobrir esse custo.
+**Cold start nos dois canais.** Com zero instâncias, a primeira requisição depois de um período ocioso espera alguns segundos enquanto o Cloud Run sobe o contêiner. No WhatsApp o atraso pesa menos, porque a pessoa manda a mensagem e segue o que estava fazendo. No painel pesa mais, e a mitigação é o cache local: quem volta vê na hora o último estado salvo, enquanto a sincronização espera o backend acordar. A primeira visita, sem cache, ainda sente o atraso. A saída é conhecida e tem preço: uma instância sempre ligada evita o cold start depois de ociosidade, em troca de custo fixo mensal, que passa a valer quando a base pagante cobrir esse custo. Instâncias novas, abertas numa expansão ou num deploy, continuam subindo a frio.
 
 **O custo que mais pesa é o da IA.** Cada mensagem envia ao modelo cerca de 23 mil tokens de entrada na mediana (instruções, dados da família e esquemas das ferramentas), e cada rodada de chamada de ferramenta paga esse prefixo de novo. Perto disso, as leituras do Firestore são troco. Três mecanismos atacam esse custo:
 
@@ -119,8 +123,8 @@ Na bateria de desenvolvimento, só o modelo principal acertou 3 de 6 frutas. Com
 
 <table>
 <tr>
-<td width="34%"><img src="assets/conversa-regra-de-categoria.png" alt="Conversa no WhatsApp: criação da categoria Contas, regra 'toda vez que eu falar paguei' e despesa de internet registrada em Contas"></td>
-<td width="66%"><img src="assets/lancamentos.png" alt="Tela de transações com internet em Contas, ônibus e Uber recategorizados para Lazer e a conta de luz agendada"></td>
+<td width="42%"><img src="assets/conversa-regra-de-categoria.png" alt="Conversa no WhatsApp: criação da categoria Contas, regra 'toda vez que eu falar paguei' e despesa de internet registrada em Contas"></td>
+<td width="58%"><img src="assets/lancamentos.png" alt="Tela de transações com internet em Contas, ônibus e Uber recategorizados para Lazer e a conta de luz agendada"></td>
 </tr>
 <tr>
 <td><sub>A regra é ensinada na conversa e vale para todo o grupo</sub></td>
@@ -138,8 +142,8 @@ Na bateria de desenvolvimento, só o modelo principal acertou 3 de 6 frutas. Com
 
 <table>
 <tr>
-<td width="34%"><img src="assets/conversa-edicao-em-lote.png" alt="Bot lista as duas despesas de transporte, pede 'sim' e só então altera a categoria"></td>
-<td width="66%">
+<td width="42%"><img src="assets/conversa-edicao-em-lote.png" alt="Bot lista as duas despesas de transporte, pede 'sim' e só então altera a categoria"></td>
+<td width="58%">
 
 **A lista que o usuário viu é a verdade.** A causa raiz recorrente desse tipo de bug era refazer a busca na hora de confirmar. Hoje a confirmação parte do conjunto exibido, aplica os mesmos filtros e só então grava.
 
@@ -195,11 +199,35 @@ Idempotência precisa cobrir **todos os efeitos** do fluxo, não só a escrita p
 
 Comprovantes passam por um fluxo de visão, que extrai valor, tipo, destinatário e data e **mostra uma prévia antes de gravar**. Compromissos viram eventos com lembrete, sincronizados com o Google Calendar e avisados pelo WhatsApp no fuso da família.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuário
+    participant B as Backend (Cloud Run)
+    participant G as Gemini Vision
+    participant S as Sessão da conversa
+    participant F as Dados da família
+    U->>B: foto do comprovante (webhook)
+    B-->>U: "📸 Deixa eu dar uma olhada..."
+    B->>G: extrair valor, tipo, destinatário e data
+    G-->>B: dados extraídos
+    B->>S: guarda o comprovante pendente
+    B-->>U: prévia + "sim, editar ou cancelar"
+    U->>B: "sim" (webhook)
+    B->>S: há comprovante pendente?
+    Note over B: parser determinístico reconhece a resposta, sem chamar o modelo
+    B->>F: grava a transação
+    B->>S: remove o pendente
+    B-->>U: "Despesa de R$ 42,50 registrada"
+```
+
+Duas decisões aparecem no diagrama. A prévia fica na sessão da conversa, não nos dados da família, então nada entra no saldo antes da confirmação. E a resposta à prévia é reconhecida por um parser, não pelo modelo: "sim", "editar" e "cancelar" não custam tokens, respondem mais rápido e não correm o risco de uma confirmação alucinada.
+
 <table>
 <tr>
-<td width="36%"><img src="assets/conversa-comprovante.png" alt="Comprovante Pix fictício enviado no WhatsApp, prévia com valor, categoria e conta, e registro após o 'sim'"></td>
-<td width="36%"><img src="assets/conversa-agenda.png" alt="Mensagem 'Dentista sexta às 15h' e confirmação do evento com horário e lembrete"></td>
-<td width="28%"><img src="assets/painel-celular.png" alt="Painel do FinFlow no celular com saldo, agenda e resumo semanal"></td>
+<td width="40%"><img src="assets/conversa-comprovante.png" alt="Comprovante Pix fictício enviado no WhatsApp, prévia com valor, categoria e conta, e registro após o 'sim'"></td>
+<td width="40%"><img src="assets/conversa-agenda.png" alt="Mensagem 'Dentista sexta às 15h' e confirmação do evento com horário e lembrete"></td>
+<td width="20%"><img src="assets/painel-celular.png" alt="Painel do FinFlow no celular com saldo, agenda e resumo semanal"></td>
 </tr>
 <tr>
 <td><sub>Comprovante (fictício): prévia e confirmação</sub></td>
@@ -232,7 +260,7 @@ Ficaram duas lições. **Um fallback só protege se não compartilha o domínio 
 
 ## Segurança e LGPD
 
-- **Isolamento em duas camadas.** O backend filtra toda consulta pela família, e as Security Rules bloqueiam o acesso cruzado mesmo que o backend erre.
+- **Isolamento por família em cada caminho.** No painel, que lê o Firestore direto, as Security Rules restringem os dados à família e ao papel. No backend, que usa o Admin SDK e não passa pelas Rules, o escopo por família é aplicado pelo código em toda consulta.
 - **Permissões no token.** Família e papel viajam como custom claims no JWT. As Rules decidem sem ler documento extra, o que é mais rápido e mais barato, e só consultam o banco como fallback.
 - **Entradas autenticadas.** Webhooks do WhatsApp exigem chave no cabeçalho, e os do Asaas exigem token, com idempotência transacional. A API usa `helmet` e rate limit de 200 requisições por minuto por IP.
 - **Direitos do titular.** A exclusão de conta acontece só pelo painel e fica bloqueada enquanto houver assinatura ativa, para não deixar cobrança órfã. O usuário exporta seus dados em CSV, PDF e Excel, e as ações sensíveis ficam em log de auditoria com retenção de 90 dias.
@@ -261,4 +289,4 @@ Desenvolvo com agentes de IA. Eu defino as regras de negócio, avalio as propost
 
 ---
 
-<sub>[finflows.com.br](https://www.finflows.com.br/) · Repositório privado. Este estudo descreve decisões e mecanismos sem expor código ou dados de clientes.</sub>
+<sub>[← Voltar ao índice](../README.md) · [finflows.com.br](https://www.finflows.com.br/) · Repositório privado. Este estudo descreve decisões e mecanismos sem expor código ou dados de clientes.</sub>

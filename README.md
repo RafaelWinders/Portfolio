@@ -10,8 +10,8 @@ O código dos projetos é privado. Cada estudo descreve o problema, as decisões
 
 | Projeto | O que é | Destaques técnicos | Estágio |
 |---|---|---|---|
-| [**FinFlow**](FinFlow/) | Finanças da família e agenda pelo WhatsApp, com agente de IA e painel web | Agente com regras nas ferramentas, custo unitário medido (~R$ 0,05 por mensagem), Firestore com agregados por trigger, idempotência de cobrança | SaaS em produção, com clientes pagantes |
-| [**Mentati**](Mentati/) | Gestão de consultórios de saúde mental: agenda, prontuário e receitas | Regras clínicas garantidas no PostgreSQL (exclusão por intervalo, imutabilidade, acesso por papel), API multi-tenant | Em desenvolvimento, preparando o piloto |
+| [**FinFlow**](FinFlow/) | Finanças da família e agenda pelo WhatsApp, com agente de IA e painel web | Agente com regras nas ferramentas, custo unitário medido (~R$ 0,046 de IA por mensagem), Firestore com agregados por trigger, idempotência de cobrança | SaaS em produção, com clientes pagantes |
+| [**Mentati**](Mentati/) | Gestão de consultórios de saúde mental: agenda, prontuário e receitas | Conflito de agenda e imutabilidade do prontuário garantidos no PostgreSQL, autorização por papel e vínculo na API multi-tenant | Em desenvolvimento, preparando o piloto |
 
 ## Tecnologias
 
